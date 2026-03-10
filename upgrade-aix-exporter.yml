@@ -182,12 +182,10 @@
         var: version_check.stdout_lines
 
     - name: Health check - wait for metrics endpoint
-      shell: "curl -s -o /dev/null -w '%{http_code}' http://localhost:9100/metrics"
-      register: health
-      retries: 3
-      delay: 5
-      until: health.stdout == "200"
-      changed_when: false
+      wait_for:
+        host: localhost
+        port: 9100
+        timeout: 15
 
 
 - name: Deployment summary
