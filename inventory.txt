@@ -1,6 +1,7 @@
 [aix_servers]
-ecux1810 ansible_host=ecarbsux1810a01 ansible_user=root
+#ecux1810 ansible_host=ecarbsux1810a01 ansible_user=root
 ecux1811 ansible_host=ecarbsux1811a01 ansible_user=root
+#ecux2120 ansible_host=ecarbsux2120a01 ansible_user=root
 
 [aix_servers:vars]
 ansible_connection=ssh

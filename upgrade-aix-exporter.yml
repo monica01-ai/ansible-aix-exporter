@@ -40,18 +40,26 @@
 
     - name: Set fileset flags
       set_fact:
-        old_installed: "{{ old_fileset in ansible_facts.get('lpp', {}) }}"
-        new_installed: "{{ new_fileset in ansible_facts.get('lpp', {}) }}"
+        old_installed: "{{ old_fileset in ansible_facts.filesets }}"
+        new_installed: "{{ new_fileset in ansible_facts.filesets }}"
+
+    - name: Gather package facts
+      ansible.builtin.package_facts:
+        manager: rpm   
+
+    - name: Install python3-psutil
+      shell: /opt/freeware/bin/dnf install -y  python3-psutil
+      when: "'python3-psutil' not in ansible_facts.packages"
 
     - name: Check if aix-exporter process exists
-      shell: ps -ef | grep -v grep | grep aix-exporter
-      register: new_proc_check
-      changed_when: false
-      failed_when: false
+      community.general.pids:
+        name: "{{ new_process }}"
+      register: new_proc
+      when: new_installed
 
     - name: Set running flag
       set_fact:
-        new_exporter_running: "{{ new_proc_check.rc == 0 }}"
+        new_exporter_running: "{{ new_proc.pids | length != 0 }}"
 
     - name: Get installed version
       shell: lslpp -l {{ new_fileset }} | awk '/{{ new_fileset }}/{print $2}'
@@ -92,16 +100,16 @@
       when: old_installed
       failed_when: false
 
-    - name: Check if legacy process exists
-      shell: "ps -ef | grep -v grep | grep {{ old_process }}"
-      register: old_proc_check
-      changed_when: false
-      failed_when: false
+    - name: Find legacy process PIDs
+      community.general.pids:
+        name: "{{ old_process }}"
+      register: old_pids
       when: old_installed
 
-    - name: Kill legacy process if running
-      shell: "ps -ef | grep -v grep | grep {{ old_process }} | awk '{print $2}' | xargs -I{} kill -9 {}"
-      when: old_installed and old_proc_check.rc == 0
+    - name: Kill legacy processes
+      shell: "kill -9 {{ item }}"
+      loop: "{{ old_pids.pids | default([]) }}"
+      when: old_installed and old_pids.pids | default([]) | length > 0
       changed_when: true
       failed_when: false
 
