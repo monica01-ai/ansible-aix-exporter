@@ -1,0 +1,19 @@
+0 030913520926 2
+aix-exporter.1.0.0.2.bff 4 R I aix-exporter {
+aix-exporter.rte 01.00.0000.0002 1 N U en_US Prometheus exporter for AIX
+[
+%
+/etc/aix-exporter 8
+/usr/local/bin 1920
+/usr/local/lib 2688
+/usr/local/share/aix-exporter 56
+/usr/lib/objrepos 8
+INSTWORK 40 40
+%
+%
+%
+%
+%
+%
+]
+}

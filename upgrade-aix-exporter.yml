@@ -1,0 +1,116 @@
+---
+# Ansible Playbook: Upgrade AIX monitoring exporter
+# Migrates from legacy prom_exporter_aix.rte to aix-exporter
+# Target: AIX 7.2+ servers
+#
+# Requirements:
+#   ansible-galaxy collection install ibm.power_aix community.general
+#
+# Usage:
+#   ansible-playbook -i inventory upgrade-aix-exporter.yml
+
+- name: Upgrade AIX exporter
+  hosts: aix_servers
+  gather_facts: false
+  become: true
+
+  vars:
+    bff_file: "aix-exporter.1.0.0.2.bff"
+    bff_src: "files/{{ bff_file }}"
+    bff_tmpdir: "/tmp/aix-exporter-install"
+    old_fileset: "prom_exporter_aix.rte"
+    old_service: "prom_exporter"
+    new_fileset: "aix-exporter.rte"
+    new_service: "aix-exporter"
+
+  tasks:
+    # ---- Prepare staging directory ----
+    - name: Create temporary install directory
+      file:
+        path: "{{ bff_tmpdir }}"
+        state: directory
+        mode: "0755"
+
+    - name: Copy BFF package to staging directory
+      copy:
+        src: "{{ bff_src }}"
+        dest: "{{ bff_tmpdir }}/{{ bff_file }}"
+        mode: "0644"
+
+    # ---- Gather installed filesets ----
+    - name: Gather LPP facts (targeted)
+      ibm.power_aix.lpp_facts:
+        filesets:
+          - "{{ old_fileset }}"
+          - "{{ new_fileset }}"
+
+    - name: Set fileset flags
+      set_fact:
+        old_installed: "{{ old_fileset in ansible_facts.get('lpp', {}) }}"
+        new_installed: "{{ new_fileset in ansible_facts.get('lpp', {}) }}"
+
+    # ---- Handle legacy prom_exporter ----
+    - name: Stop legacy service
+      ansible.builtin.service:
+        name: "{{ old_service }}"
+        state: stopped
+      when: old_installed
+      failed_when: false
+
+    - name: Uninstall legacy fileset
+      community.general.installp:
+        name: "{{ old_fileset }}"
+        state: absent
+      when: old_installed
+
+    # ---- Handle existing aix-exporter (upgrade case) ----
+    - name: Stop aix-exporter service before upgrade
+      ansible.builtin.service:
+        name: "{{ new_service }}"
+        state: stopped
+      when: new_installed
+      failed_when: false
+
+    # ---- Install new version ----
+    - name: Install aix-exporter BFF
+      community.general.installp:
+        name: "{{ new_fileset }}"
+        repository_path: "{{ bff_tmpdir }}"
+        accept_license: true
+        state: present
+      register: install_result
+
+    - name: Display install result
+      debug:
+        var: install_result
+
+    # ---- Start service ----
+    - name: Start aix-exporter service
+      ansible.builtin.service:
+        name: "{{ new_service }}"
+        state: started
+
+    - name: Verify service is running
+      shell: lssrc -s {{ new_service }}
+      register: service_status
+      changed_when: false
+
+    - name: Display service status
+      debug:
+        var: service_status.stdout_lines
+
+    # ---- Cleanup ----
+    - name: Remove staging directory
+      file:
+        path: "{{ bff_tmpdir }}"
+        state: absent
+
+    # ---- Verify install ----
+    - name: Verify installed version
+      shell: lslpp -l {{ new_fileset }}
+      register: version_check
+      changed_when: false
+
+    - name: Display installed version
+      debug:
+        var: version_check.stdout_lines
