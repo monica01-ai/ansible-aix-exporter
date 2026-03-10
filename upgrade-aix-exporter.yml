@@ -11,7 +11,7 @@
 
 - name: Upgrade AIX exporter
   hosts: aix_servers
-  gather_facts: false
+  gather_facts: true
   become: true
 
   vars:
@@ -24,18 +24,8 @@
     new_service: "aix-exporter"
 
   tasks:
-    # ---- Prepare staging directory ----
-    - name: Create temporary install directory
-      file:
-        path: "{{ bff_tmpdir }}"
-        state: directory
-        mode: "0755"
-
-    - name: Copy BFF package to staging directory
-      copy:
-        src: "{{ bff_src }}"
-        dest: "{{ bff_tmpdir }}/{{ bff_file }}"
-        mode: "0644"
+    - meta: end_play
+      when: ansible_distribution != "AIX" and ( ansible_distribution_version != "7.1" or ansible_distribution_version != "7.2" or ansible_distribution_version != "7.3")
 
     # ---- Gather installed filesets ----
     - name: Gather LPP facts (targeted)
@@ -48,6 +38,32 @@
       set_fact:
         old_installed: "{{ old_fileset in ansible_facts.get('lpp', {}) }}"
         new_installed: "{{ new_fileset in ansible_facts.get('lpp', {}) }}"
+
+    - name: Check if aix-exporter process exists
+      shell: ps -ef | grep -v grep | grep aix-exporter
+      register: proc_check
+      changed_when: false
+      failed_when: false
+
+    - name: Set running flag
+      set_fact:
+	exporter_running: "{{ proc_check.rc == 0 }}"
+
+    - meta: end_play
+      when: new_installed and exporter_running
+
+    # ---- Prepare staging directory ----
+    - name: Create temporary install directory
+      file:
+        path: "{{ bff_tmpdir }}"
+        state: directory
+        mode: "0755"
+
+    - name: Copy BFF package to staging directory
+      copy:
+        src: "{{ bff_src }}"
+        dest: "{{ bff_tmpdir }}/{{ bff_file }}"
+        mode: "0644"
 
     # ---- Handle legacy prom_exporter ----
     - name: Stop legacy service
