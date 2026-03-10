@@ -43,13 +43,13 @@
 
     - name: Check if aix-exporter process exists
       shell: ps -ef | grep -v grep | grep aix-exporter
-      register: proc_check
+      register: new_proc_check
       changed_when: false
       failed_when: false
 
     - name: Set running flag
       set_fact:
-        new_exporter_running: "{{ proc_check.rc == 0 }}"
+        new_exporter_running: "{{ new_proc_check.rc == 0 }}"
 
     - name: Get installed version
       shell: lslpp -l {{ new_fileset }} | awk '/{{ new_fileset }}/{print $2}'
@@ -92,21 +92,29 @@
 
     - name: Check if legacy process exists
       shell: "ps -ef | grep -v grep | grep {{ old_process }}"
-      register: proc_check
+      register: old_proc_check
       changed_when: false
       failed_when: false
+      when: old_installed
 
     - name: Kill legacy process if running
       shell: "ps -ef | grep -v grep | grep {{ old_process }} | awk '{print $2}' | xargs -I{} kill -9 {}"
-      when: proc_check.rc == 0
+      when: old_proc_check.rc == 0
       changed_when: true
       failed_when: false
+      when: old_installed and legacy_proc_check.rc == 0
 
     - name: Uninstall legacy fileset
       community.general.installp:
         name: "{{ old_fileset }}"
         state: absent
       when: old_installed
+      register: uninstall_legacy
+
+    - name: Fail if legacy uninstall failed
+      fail:
+        msg: "Cannot uninstall {{ old_fileset }}"
+      when: old_installed and uninstall_legacy is failed
 
     # ---- Handle existing aix-exporter (upgrade case) ----
     - name: Stop aix-exporter service before upgrade
@@ -115,6 +123,18 @@
         state: stopped
       when: new_installed
       failed_when: false
+    
+    - name: Check if new process still running
+      shell: "ps -ef | grep -v grep | grep {{ new_process }}"
+      register: new_proc_recheck
+      when: new_installed
+      changed_when: false
+      failed_when: false
+
+    - name: Force kill if still running
+      shell: "kill -9 $(ps -ef | grep -v grep | grep {{ new_process }} | awk '{print $2}')"
+      when: new_installed and new_proc_recheck.rc == 0
+
 
     # ---- Install new version ----
     - name: Install aix-exporter BFF
