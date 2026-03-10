@@ -177,6 +177,10 @@
       register: version_check
       changed_when: false
 
+    - name: Display installed version
+      debug:
+        var: version_check.stdout_lines
+
     - name: Health check - wait for metrics endpoint
       shell: "curl -s -o /dev/null -w '%{http_code}' http://localhost:9100/metrics"
       register: health
@@ -189,6 +193,7 @@
 - name: Deployment summary
   hosts: aix_servers
   gather_facts: false
+  become: true
   tasks:
     - name: Check final status
       shell: "lslpp -l aix-exporter.rte 2>/dev/null | awk '/aix-exporter.rte/{print $2}'"
