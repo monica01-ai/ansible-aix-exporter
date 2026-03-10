@@ -99,10 +99,9 @@
 
     - name: Kill legacy process if running
       shell: "ps -ef | grep -v grep | grep {{ old_process }} | awk '{print $2}' | xargs -I{} kill -9 {}"
-      when: old_proc_check.rc == 0
+      when: old_installed and old_proc_check.rc == 0
       changed_when: true
       failed_when: false
-      when: old_installed and legacy_proc_check.rc == 0
 
     - name: Uninstall legacy fileset
       community.general.installp:
