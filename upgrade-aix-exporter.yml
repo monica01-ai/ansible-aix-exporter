@@ -20,12 +20,14 @@
     bff_tmpdir: "/tmp/aix-exporter-install"
     old_fileset: "prom_exporter_aix.rte"
     old_service: "prom_exporter"
+    old_process: "prom_exporter"
     new_fileset: "aix-exporter.rte"
     new_service: "aix-exporter"
+    new_process: "aix-exporter"
 
   tasks:
     - meta: end_play
-      when: ansible_distribution != "AIX" and ( ansible_distribution_version != "7.1" or ansible_distribution_version != "7.2" or ansible_distribution_version != "7.3")
+      when: ansible_distribution != "AIX" or ansible_distribution_version not in ["7.1", "7.2", "7.3"]
 
     # ---- Gather installed filesets ----
     - name: Gather LPP facts (targeted)
@@ -47,10 +49,25 @@
 
     - name: Set running flag
       set_fact:
-	exporter_running: "{{ proc_check.rc == 0 }}"
+        new_exporter_running: "{{ proc_check.rc == 0 }}"
 
-    - meta: end_play
-      when: new_installed and exporter_running
+    - name: Get installed version
+      shell: lslpp -l {{ new_fileset }} | awk '/{{ new_fileset }}/{print $2}'
+      register: installed_version
+      changed_when: false
+      failed_when: false
+      when: new_installed
+
+    - name: Set target version from BFF filename
+      set_fact:
+        target_version: "{{ bff_file | regex_replace('^aix-exporter\\.(.*)\\.bff$', '\\1') }}"
+
+    - name: Skip if target version already installed and running
+      meta: end_play
+      when:
+        - new_installed
+        - new_exporter_running
+        - installed_version.stdout | default('') == target_version
 
     # ---- Prepare staging directory ----
     - name: Create temporary install directory
@@ -71,6 +88,18 @@
         name: "{{ old_service }}"
         state: stopped
       when: old_installed
+      failed_when: false
+
+    - name: Check if legacy process exists
+      shell: "ps -ef | grep -v grep | grep {{ old_process }}"
+      register: proc_check
+      changed_when: false
+      failed_when: false
+
+    - name: Kill legacy process if running
+      shell: "ps -ef | grep -v grep | grep {{ old_process }} | awk '{print $2}' | xargs -I{} kill -9 {}"
+      when: proc_check.rc == 0
+      changed_when: true
       failed_when: false
 
     - name: Uninstall legacy fileset
