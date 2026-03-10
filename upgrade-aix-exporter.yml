@@ -59,7 +59,7 @@
 
     - name: Set running flag
       set_fact:
-        new_exporter_running: "{{ new_proc.pids | length != 0 }}"
+        new_exporter_running: "{{ (new_proc.pids | default([])) | length > 0 }}"
 
     - name: Get installed version
       shell: lslpp -l {{ new_fileset }} | awk '/{{ new_fileset }}/{print $2}'
