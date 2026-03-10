@@ -199,5 +199,3 @@
     - name: Report
       debug:
         msg: "{{ inventory_hostname }}: {{ final_ver.stdout | default('NOT INSTALLED') }}"
-
-        var: version_check.stdout_lines
